@@ -16,11 +16,11 @@ export default function AuthPage() {
     setError(null)
 
     try {
-      const res = await fetch(`https://<your-project>.functions.supabase.co/${mode}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
-      })
+      const res = await fetch(`https://ykxaiwmvktircgilkejq.functions.supabase.co/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    })
 
       const data = await res.json()
 

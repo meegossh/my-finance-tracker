@@ -16,25 +16,23 @@ export default function AuthPage() {
     setError(null)
 
     try {
-      const res = await fetch(`https://ykxaiwmvktircgilkejq.functions.supabase.co/signup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    })
+      const res = await fetch(`https://ykxaimwvkitcrgclikej.functions.supabase.co/${mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
 
       const data = await res.json()
+      console.log(`${mode} response:`, data)
 
       if (data.error) {
         setError(data.error.message || data.error)
         return
       }
 
-      // If signup/login succeeds, manually set session if returned
-      if (data.session) {
-        await supabase.auth.setSession(data.session)
-      }
+      // If your Edge Function returns a session object, you could also use setSession here.
+      // For now we assume Supabase client auto-reads from localStorage on next page load.
 
-      // Or force refresh to let supabase.auth pick up localStorage
       router.push("/")
     } catch (err: any) {
       console.error("Unexpected error:", err)

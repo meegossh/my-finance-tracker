@@ -9,24 +9,25 @@ interface Expense {
   amount: number
   date: string
   description: string
+  category_id: string | null
+  created_at: string
 }
 
 export default function Home() {
+  const router = useRouter()
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) {
-        // Redirect to your auth route (or you could show login form here)
         router.push("/auth")
         return
       }
 
-      // Fetch expenses from Supabase directly
       const { data, error } = await supabase
         .from("expenses")
         .select("*")
@@ -34,6 +35,7 @@ export default function Home() {
 
       if (error) {
         console.error("Error fetching expenses:", error)
+        setError("Failed to load expenses.")
       } else {
         setExpenses(data || [])
       }
@@ -44,11 +46,25 @@ export default function Home() {
     fetchData()
   }, [router])
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push("/auth")
+  }
+
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">Your Expenses</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Your Expenses</h1>
+        <button
+          onClick={handleSignOut}
+          className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+        >
+          Sign Out
+        </button>
+      </div>
 
       {loading && <p>Loading...</p>}
+      {error && <p className="text-red-500">{error}</p>}
 
       {!loading && expenses.length === 0 && (
         <p className="text-gray-600">No expenses found. Try adding some!</p>

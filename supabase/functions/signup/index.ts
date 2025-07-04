@@ -17,8 +17,8 @@ serve(async (req) => {
     const { email, password } = await req.json();
 
     const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+        Deno.env.get("URL") ?? "",
+        Deno.env.get("SERVICE_ROLE_KEY") ?? ""
     );
 
     const { data, error } = await supabase.auth.admin.createUser({

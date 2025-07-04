@@ -1,5 +1,4 @@
 "use client";
-
 import { useState } from "react";
 
 export default function Home() {
@@ -15,7 +14,6 @@ export default function Home() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`, // or hardcode key if testing
         },
         body: JSON.stringify({ email, password }),
       });
@@ -26,7 +24,7 @@ export default function Home() {
         throw new Error(data.error || "Unexpected error");
       }
 
-      setMessage(`✅ Success: ${data.message}`);
+      setMessage(`✅ User created: ${JSON.stringify(data.user)}`);
     } catch (err) {
       console.error(err);
       setMessage(`❌ ${err instanceof Error ? err.message : "Unknown error"}`);

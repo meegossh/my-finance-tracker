@@ -1,63 +1,62 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import React, { useState } from 'react';
 
-export default function Home() {
+export default function HomePage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
 
   const handleLogin = async () => {
+    setMessage('');
     try {
-      const response = await fetch('/api/login', { // adjust if you have direct Supabase client here
+      const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-
-      if (!response.ok) throw new Error('Login failed');
-
+      if (!res.ok) {
+        throw new Error('Login failed');
+      }
       setMessage('Login successful!');
     } catch (err) {
-      setMessage('An unexpected error occurred.');
+      setMessage('An error occurred during login.');
     }
   };
 
   return (
-    <main style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '50px' }}>
-      <h1>Welcome to My Finance Tracker</h1>
+    <div style={{ padding: '2rem', maxWidth: '400px', margin: '0 auto' }}>
+      <h1>Welcome to Finance App</h1>
 
-      <div style={{ marginTop: '30px', display: 'flex', flexDirection: 'column', width: '300px' }}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{ padding: '10px', marginBottom: '10px' }}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{ padding: '10px', marginBottom: '10px' }}
-        />
-        <button
-          onClick={handleLogin}
-          style={{ padding: '10px', background: '#0070f3', color: 'white', border: 'none', borderRadius: '4px' }}
-        >
-          Login
-        </button>
-        {message && <p style={{ color: 'red', marginTop: '10px' }}>{message}</p>}
-      </div>
+      <h2>Login</h2>
+      <input
+        type="email"
+        placeholder="Email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+        style={{ display: 'block', width: '100%', marginBottom: '1rem' }}
+      />
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+        style={{ display: 'block', width: '100%', marginBottom: '1rem' }}
+      />
+      <button onClick={handleLogin} style={{ width: '100%', padding: '0.5rem' }}>
+        Login
+      </button>
 
-      <div style={{ marginTop: '20px' }}>
+      {message && (
+        <p style={{ color: 'red', marginTop: '1rem' }}>{message}</p>
+      )}
+
+      <div style={{ marginTop: '2rem', textAlign: 'center' }}>
         <span>Don't have an account? </span>
-        <Link href="/signup" style={{ color: 'green', textDecoration: 'underline' }}>
+        <a href="/auth" style={{ color: 'green', textDecoration: 'underline' }}>
           Sign Up
-        </Link>
+        </a>
       </div>
-    </main>
+    </div>
   );
 }

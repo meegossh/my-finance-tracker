@@ -43,6 +43,8 @@
     "https://esm.sh/@supabase/storage-js@2.7.1/denonext/storage-js.mjs": "73ac8cdc95cfcd794fe603dbd7ce06d539ab51538ae6467eabe0f9cc26c993aa",
     "https://esm.sh/@supabase/supabase-js@2.39.5": "9d0313a17d35459694c530bb141754add49a1c0f90f7704874589c4e2c9e0913",
     "https://esm.sh/@supabase/supabase-js@2.39.5/denonext/supabase-js.mjs": "4f4d4b0a68436274de944f3f54606c3886b96f98814b422e8a37776da5d536c0",
+    "https://esm.sh/@supabase/supabase-js@2.39.7/denonext/supabase-js.mjs": "a98935fe4ce94ad395f140b22ada7a4f505ed242700f76302d75dbaa31618def",
+    "https://esm.sh/@supabase/supabase-js@2.39.7?dts": "5361671c958daa350e504d9975da64b2d6dc9e81390b985ccdafb2e3572e24e7",
     "https://esm.sh/@supabase/supabase-js@2.50.3": "4fa1366e23dd8aaadcecafdc272e4eb7d0fb6896a186ab8cf7f62db74b300826",
     "https://esm.sh/@supabase/supabase-js@2.50.3/denonext/supabase-js.mjs": "b333e6ade6dd2092a2685adfda71ea8a64bd0a8e1820a14b7f1d5dcdf8ac9cc7",
     "https://esm.sh/bufferutil@4.0.9/denonext/bufferutil.mjs": "13dca4d5bb2c68cbe119f880fa3bd785b9a81a8e02e0834dae604b4b85295cd8",

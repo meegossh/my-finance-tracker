@@ -6,9 +6,29 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
 
-  const handleSignup = async () => {
-    setMessage(""); // clear previous
+  const handleCorsTest = async () => {
+    setMessage(""); 
+    try {
+      const res = await fetch("https://ykxaimwvkitcrgclikej.functions.supabase.co/cors-test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ test: true }),
+      });
 
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Unexpected error");
+
+      setMessage(`✅ CORS test success: ${JSON.stringify(data)}`);
+    } catch (err) {
+      console.error(err);
+      setMessage(`❌ ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
+  };
+
+  const handleSignup = async () => {
+    setMessage(""); 
     try {
       const res = await fetch("https://ykxaimwvkitcrgclikej.functions.supabase.co/signup", {
         method: "POST",
@@ -19,10 +39,7 @@ export default function Home() {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Unexpected error");
-      }
+      if (!res.ok) throw new Error(data.error || "Unexpected error");
 
       setMessage(`✅ User created: ${JSON.stringify(data.user)}`);
     } catch (err) {
@@ -33,7 +50,7 @@ export default function Home() {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen p-4">
-      <h1 className="text-3xl mb-6 font-bold">Sign Up Demo</h1>
+      <h1 className="text-3xl mb-6 font-bold">Signup + CORS Demo</h1>
 
       <div className="flex flex-col gap-4 w-full max-w-sm">
         <input
@@ -57,6 +74,13 @@ export default function Home() {
           className="bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
         >
           Sign Up
+        </button>
+
+        <button
+          onClick={handleCorsTest}
+          className="bg-green-600 text-white py-2 rounded hover:bg-green-700"
+        >
+          Test CORS
         </button>
 
         {message && (

@@ -1,73 +1,63 @@
-"use client";
+'use client';
 
-import { useState } from "react";
+import { useState } from 'react';
+import Link from 'next/link';
 
-export default function AuthPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
+export default function Home() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
 
   const handleLogin = async () => {
-    setMessage(""); // clear previous
-
     try {
-      const res = await fetch("https://ykxaimwvkitcrgclikej.functions.supabase.co/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`, // or your key
-        },
+      const response = await fetch('/api/login', { // adjust if you have direct Supabase client here
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await res.json();
+      if (!response.ok) throw new Error('Login failed');
 
-      if (!res.ok) {
-        throw new Error(data.error || "Unexpected error");
-      }
-
-      setMessage(`✅ Success: ${data.message}`);
+      setMessage('Login successful!');
     } catch (err) {
-      console.error(err);
-      setMessage(`❌ ${err instanceof Error ? err.message : "Unknown error"}`);
+      setMessage('An unexpected error occurred.');
     }
   };
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen p-4">
-      <h1 className="text-3xl mb-6 font-bold">Login Demo</h1>
+    <main style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '50px' }}>
+      <h1>Welcome to My Finance Tracker</h1>
 
-      <div className="flex flex-col gap-4 w-full max-w-sm">
+      <div style={{ marginTop: '30px', display: 'flex', flexDirection: 'column', width: '300px' }}>
         <input
-          className="p-2 border rounded"
           type="email"
-          placeholder="email@example.com"
+          placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          style={{ padding: '10px', marginBottom: '10px' }}
         />
-
         <input
-          className="p-2 border rounded"
           type="password"
-          placeholder="password"
+          placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          style={{ padding: '10px', marginBottom: '10px' }}
         />
-
         <button
           onClick={handleLogin}
-          className="bg-green-600 text-white py-2 rounded hover:bg-green-700"
+          style={{ padding: '10px', background: '#0070f3', color: 'white', border: 'none', borderRadius: '4px' }}
         >
           Login
         </button>
+        {message && <p style={{ color: 'red', marginTop: '10px' }}>{message}</p>}
+      </div>
 
-        {message && (
-          <div className="mt-2 text-center">
-            {message}
-          </div>
-        )}
+      <div style={{ marginTop: '20px' }}>
+        <span>Don't have an account? </span>
+        <Link href="/signup" style={{ color: 'green', textDecoration: 'underline' }}>
+          Sign Up
+        </Link>
       </div>
     </main>
   );
 }
-

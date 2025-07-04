@@ -1,54 +1,72 @@
 /// <reference lib="deno.ns" />
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-console.log("Signup function running...");
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, apikey",
+};
+
+console.log("Signup function is running...");
 
 serve(async (req: Request) => {
-  const { method } = req;
-
-  // Enable CORS
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  };
-
-  if (method === "OPTIONS") {
-    return new Response("OK", { headers: corsHeaders });
-  }
-
-  // Check Authorization header
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader) {
-    return new Response(
-      JSON.stringify({ error: "Missing authorization header" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const body = await req.json();
-    const { email, password } = body;
+    const { email, password } = await req.json();
 
     if (!email || !password) {
       return new Response(
-        JSON.stringify({ error: "Email and password are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Email and password required" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
       );
     }
 
-    // 🔥 Example of a "success" payload
-    return new Response(
-      JSON.stringify({ message: `User signed up: ${email}` }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    const supabase = createClient(
+      Deno.env.get("URL") ?? "",
+      Deno.env.get("SERVICE_ROLE_KEY") ?? ""
     );
 
-  } catch (err) {
-    console.error("Error:", err);
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+    });
+
+    if (error) {
+      console.error("Signup error:", error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: "Invalid JSON payload" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ message: `User created for ${email}`, data }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  } catch (err) {
+    console.error("Unexpected error:", err);
+    return new Response(
+      JSON.stringify({
+        error: err instanceof Error ? err.message : String(err),
+      }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
     );
   }
 });

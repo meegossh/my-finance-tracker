@@ -2,20 +2,20 @@
 
 import { useState } from "react";
 
-export default function AuthPage() {
+export default function Home() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
 
-  const handleLogin = async () => {
+  const handleSignup = async () => {
     setMessage(""); // clear previous
 
     try {
-      const res = await fetch("https://ykxaimwvkitcrgclikej.functions.supabase.co/login", {
+      const res = await fetch("https://ykxaimwvkitcrgclikej.functions.supabase.co/signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`, // or your key
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`, // or hardcode key if testing
         },
         body: JSON.stringify({ email, password }),
       });
@@ -35,7 +35,7 @@ export default function AuthPage() {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen p-4">
-      <h1 className="text-3xl mb-6 font-bold">Login Demo</h1>
+      <h1 className="text-3xl mb-6 font-bold">Sign Up Demo</h1>
 
       <div className="flex flex-col gap-4 w-full max-w-sm">
         <input
@@ -55,10 +55,10 @@ export default function AuthPage() {
         />
 
         <button
-          onClick={handleLogin}
-          className="bg-green-600 text-white py-2 rounded hover:bg-green-700"
+          onClick={handleSignup}
+          className="bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
         >
-          Login
+          Sign Up
         </button>
 
         {message && (

@@ -1,52 +1,54 @@
 /// <reference lib="deno.ns" />
-import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, apikey"
-      },
-    });
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+
+console.log("Signup function running...");
+
+serve(async (req: Request) => {
+  const { method } = req;
+
+  // Enable CORS
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
+
+  if (method === "OPTIONS") {
+    return new Response("OK", { headers: corsHeaders });
+  }
+
+  // Check Authorization header
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader) {
+    return new Response(
+      JSON.stringify({ error: "Missing authorization header" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   try {
-    const { email, password } = await req.json();
+    const body = await req.json();
+    const { email, password } = body;
 
-    const supabase = createClient(
-        Deno.env.get("URL") ?? "",
-        Deno.env.get("SERVICE_ROLE_KEY") ?? ""
-    );
+    if (!email || !password) {
+      return new Response(
+        JSON.stringify({ error: "Email and password are required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    const { data, error } = await supabase.auth.admin.createUser({
-      email,
-      password
-    });
-
+    // 🔥 Example of a "success" payload
     return new Response(
-      JSON.stringify({ data, error }),
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
-      }
+      JSON.stringify({ message: `User signed up: ${email}` }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (err) {
+    console.error("Error:", err);
     return new Response(
-      JSON.stringify({
-        error: err instanceof Error ? err.message : String(err)
-      }),
-      {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
-      }
+      JSON.stringify({ error: "Invalid JSON payload" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

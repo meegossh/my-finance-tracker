@@ -1,86 +1,72 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { supabase } from "../../lib/supabaseClient"
+import { useState } from "react";
 
 export default function AuthPage() {
-  const router = useRouter()
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
 
-  const handleAuth = async (mode: "signup" | "login") => {
-    setLoading(true)
-    setError(null)
+  const handleLogin = async () => {
+    setMessage(""); // clear previous
 
     try {
-      const res = await fetch(`https://ykxaimwvkitcrgclikej.functions.supabase.co/${mode}`, {
+      const res = await fetch("https://ykxaimwvkitcrgclikej.functions.supabase.co/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`, // or your key
+        },
         body: JSON.stringify({ email, password }),
-      })
+      });
 
-      const data = await res.json()
-      console.log(`${mode} response:`, data)
+      const data = await res.json();
 
-      if (data.error) {
-        setError(data.error.message || data.error)
-        return
+      if (!res.ok) {
+        throw new Error(data.error || "Unexpected error");
       }
 
-      // If your Edge Function returns a session object, you could also use setSession here.
-      // For now we assume Supabase client auto-reads from localStorage on next page load.
-
-      router.push("/")
-    } catch (err: any) {
-      console.error("Unexpected error:", err)
-      setError("An unexpected error occurred.")
-    } finally {
-      setLoading(false)
+      setMessage(`✅ Success: ${data.message}`);
+    } catch (err) {
+      console.error(err);
+      setMessage(`❌ ${err instanceof Error ? err.message : "Unknown error"}`);
     }
-  }
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-6">
-      <h1 className="text-2xl font-bold mb-6">Login or Sign Up</h1>
+    <main className="flex flex-col items-center justify-center min-h-screen p-4">
+      <h1 className="text-3xl mb-6 font-bold">Login Demo</h1>
 
-      <div className="w-full max-w-xs space-y-4">
+      <div className="flex flex-col gap-4 w-full max-w-sm">
         <input
-          className="border rounded w-full p-2"
+          className="p-2 border rounded"
           type="email"
-          placeholder="Email"
+          placeholder="email@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
+
         <input
-          className="border rounded w-full p-2"
+          className="p-2 border rounded"
           type="password"
-          placeholder="Password"
+          placeholder="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        {error && <div className="text-red-500 text-sm">{error}</div>}
+        <button
+          onClick={handleLogin}
+          className="bg-green-600 text-white py-2 rounded hover:bg-green-700"
+        >
+          Login
+        </button>
 
-        <div className="flex space-x-2">
-          <button
-            className="bg-blue-600 text-white rounded px-4 py-2 flex-1 disabled:opacity-50"
-            onClick={() => handleAuth("login")}
-            disabled={loading}
-          >
-            Login
-          </button>
-          <button
-            className="bg-green-600 text-white rounded px-4 py-2 flex-1 disabled:opacity-50"
-            onClick={() => handleAuth("signup")}
-            disabled={loading}
-          >
-            Sign Up
-          </button>
-        </div>
+        {message && (
+          <div className="mt-2 text-center">
+            {message}
+          </div>
+        )}
       </div>
-    </div>
-  )
+    </main>
+  );
 }

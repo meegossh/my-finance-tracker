@@ -1,58 +1,51 @@
 "use client";
-import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabaseClient";
-import { useRouter } from "next/navigation";
 
-export default function HomePage() {
-  const router = useRouter();
+import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+import Sidebar from "@/components/sidebar";
+import Dashboard from "@/components/dashboard";
+import Accounts from "@/components/accounts";
+import Transactions from "@/components/transactions";
+import CashFlow from "@/components/cashflow";
+import Reports from "@/components/reports";
+import Budget from "@/components/budget";
+import Recurring from "@/components/recurring";
+import Goals from "@/components/goals";
+import Investments from "@/components/investments";
+import Settings from "@/components/settings";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+export default function Welcome() {
+  const [selected, setSelected] = useState("Dashboard");
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user || null);
-      setLoading(false);
-    };
-    checkUser();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) {
+        setUser(data.user);
+      }
+    });
   }, []);
 
-  const handleGetStarted = () => {
-    if (user) {
-      router.push("/welcome");
-    } else {
-      router.push("/auth");
-    }
-  };
-
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
-      <div className="w-full max-w-sm bg-white p-6 rounded-lg shadow-md text-center">
-        <div className="text-2xl font-bold mb-2">🍂 Meegossh's Finance App</div>
-        <div className="text-lg font-semibold mb-1">Manage your money with ease</div>
-        <p className="text-gray-500 mb-6">
-          Simple budgeting, smart insights, and total control of your expenses.
-        </p>
-
-        <button
-          onClick={handleGetStarted}
-          className="bg-orange-400 text-white py-2 px-4 rounded w-full hover:bg-orange-500"
-        >
-          Get Started
-        </button>
-
-        {!loading && user && (
-          <p className="mt-4 text-sm text-green-700">
-            You’re already signed in as <span className="font-semibold">{user.email}</span>
-          </p>
-        )}
-
-        <p className="text-xs text-gray-500 mt-6">
-          By continuing, you agree to our{" "}
-          <a href="#" className="underline">Terms of Service</a> and{" "}
-          <a href="#" className="underline">Privacy Policy</a>.
-        </p>
+    <div className="flex h-screen bg-[#f3f4f6]">
+      <Sidebar selected={selected} setSelected={setSelected} user={user} />
+      <div className="flex-1 p-8 overflow-y-auto">
+        {selected === "Dashboard" && <Dashboard />}
+        {selected === "Accounts" && <Accounts />}
+        {selected === "Transactions" && <Transactions />}
+        {selected === "Cash Flow" && <CashFlow />}
+        {selected === "Reports" && <Reports />}
+        {selected === "Budget" && <Budget />}
+        {selected === "Recurring" && <Recurring />}
+        {selected === "Goals" && <Goals />}
+        {selected === "Investments" && <Investments />}
+        {selected === "Settings" && <Settings />}
       </div>
-    </main>
+    </div>
   );
 }

@@ -33,7 +33,7 @@ export default function AuthPage() {
             Sign up to start your free trial
           </div>
           <p className="text-gray-500 text-center mt-1">
-            Try Monarch free, cancel anytime.
+            Try Finance app free, cancel anytime.
           </p>
         </div>
 

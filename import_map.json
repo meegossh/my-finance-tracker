@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "lucide-react": "./node_modules/lucide-react/dist/index.js"
+  }
+}

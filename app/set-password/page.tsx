@@ -52,7 +52,7 @@ export default function SetPasswordPage() {
     <main className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
       <div className="w-full max-w-sm bg-white p-6 rounded-lg shadow-md">
         <div className="flex flex-col items-center mb-4">
-          <div className="text-2xl font-bold mb-1">🍂 Meegossh's Finance App</div>
+          <div className="text-2xl font-bold mb-1">🍂 VitaFin</div>
           <h1 className="text-xl font-semibold text-center mb-2">Create your password</h1>
           <p className="text-gray-500 text-center">
             Your password must be at least 8 characters long, include 1 symbol and 1 number.

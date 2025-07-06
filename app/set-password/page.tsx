@@ -12,28 +12,38 @@ export default function SetPasswordPage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
-    const type = urlParams.get("type");
+    const type = (urlParams.get("type") || "magiclink") as "magiclink";
+
+    console.log("🔍 token from URL:", token);
+    console.log("🔍 type from URL:", type);
 
     const verifyToken = async () => {
       if (!token || !type) {
+        console.log("🚨 Missing token or type, redirecting to /auth");
         router.push("/auth");
         return;
       }
-      const { error } = await supabase.auth.verifyOtp({
+
+      console.log("✅ Calling supabase.auth.verifyOtp...");
+      const { data, error } = await supabase.auth.verifyOtp({
         token_hash: token,
-        type: "magiclink",
+        type,
       });
 
+      console.log("🔍 Supabase verifyOtp result:", { data, error });
+
       if (error) {
-        console.error("Verification failed:", error);
+        console.error("❌ Verification failed:", error);
         router.push("/auth");
       } else {
+        console.log("✅ Token verified successfully!");
         setLoading(false);
       }
     };
 
     verifyToken();
   }, [router]);
+
   const hasMinLength = password.length >= 8;
   const hasNumber = /\d/.test(password);
   const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);
@@ -44,21 +54,28 @@ export default function SetPasswordPage() {
       setMessage("❌ Password does not meet requirements.");
       return;
     }
+
+    console.log("✅ Calling supabase.auth.updateUser to set password...");
     const { error } = await supabase.auth.updateUser({ password });
+
     if (error) {
-      console.error(error);
+      console.error("❌ Failed to set password:", error);
       setMessage(`❌ ${error.message}`);
     } else {
+      console.log("✅ Password updated successfully. Redirecting to /welcome...");
       setMessage("✅ Password updated successfully!");
       setTimeout(() => router.push("/welcome"), 1500);
     }
   };
 
-  if (loading) return (
-    <main className="flex items-center justify-center min-h-screen">
-      <p>Loading...</p>
-    </main>
-  );
+  if (loading) {
+    console.log("⏳ Loading: waiting on verifyOtp...");
+    return (
+      <main className="flex items-center justify-center min-h-screen">
+        <p>Loading...</p>
+      </main>
+    );
+  }
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">

@@ -36,7 +36,7 @@ export default function SetPasswordPage() {
         console.error("❌ Verification failed:", error);
         router.push("/auth");
       } else {
-        console.log("✅ Token verified successfully!");
+        console.log("✅ Token verified successfully, showing password form");
         setLoading(false);
       }
     };
@@ -44,6 +44,7 @@ export default function SetPasswordPage() {
     verifyToken();
   }, [router]);
 
+  // Password requirements
   const hasMinLength = password.length >= 8;
   const hasNumber = /\d/.test(password);
   const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);
@@ -69,7 +70,7 @@ export default function SetPasswordPage() {
   };
 
   if (loading) {
-    console.log("⏳ Loading: waiting on verifyOtp...");
+    console.log("⏳ Waiting on verifyOtp...");
     return (
       <main className="flex items-center justify-center min-h-screen">
         <p>Loading...</p>

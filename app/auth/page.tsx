@@ -1,53 +1,43 @@
 "use client";
 import { useState } from "react";
-import { supabase } from "../../lib/supabaseClient";
 
 export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
+    setLoading(true);
     setMessage("");
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: "https://my-finance-tracker.vercel.app/set-password" // update to your deployed site
-      }
+    const res = await fetch("/api/sign-in", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
     });
 
-    if (error) {
-      console.error(error);
-      setMessage(`❌ ${error.message}`);
+    if (!res.ok) {
+      const data = await res.json();
+      console.error("Error:", data);
+      setMessage(`❌ ${data.message || "Failed to send OTP"}`);
     } else {
       setMessage("✅ Check your email for the magic login link!");
     }
+
+    setLoading(false);
   };
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
       <div className="w-full max-w-sm bg-white p-6 rounded-lg shadow-md">
         <div className="flex flex-col items-center mb-6">
-          <div className="text-2xl font-bold mb-1">🍂 Meegossh's Finance App</div>
+          <div className="text-2xl font-bold mb-1">🍂 VitaFin</div>
           <div className="text-lg font-semibold text-center">
             Sign up to start your free trial
           </div>
           <p className="text-gray-500 text-center mt-1">
             Try Finance app free, cancel anytime.
           </p>
-        </div>
-
-        <button className="flex items-center justify-center w-full border rounded py-2 mb-3 hover:bg-gray-100">
-          🍏 Continue with Apple
-        </button>
-        <button className="flex items-center justify-center w-full border rounded py-2 mb-4 hover:bg-gray-100">
-          🌐 Continue with Google
-        </button>
-
-        <div className="flex items-center mb-4">
-          <hr className="flex-grow border-gray-300" />
-          <span className="px-2 text-gray-500 text-sm">OR</span>
-          <hr className="flex-grow border-gray-300" />
         </div>
 
         <div className="flex flex-col gap-3 mb-4">
@@ -61,20 +51,21 @@ export default function AuthPage() {
 
           <button
             onClick={handleSignup}
-            className="bg-orange-400 text-white py-2 rounded hover:bg-orange-500"
+            disabled={loading}
+            className={`text-white py-2 px-4 rounded w-full ${
+              loading
+                ? "bg-orange-300 cursor-not-allowed"
+                : "bg-orange-400 hover:bg-orange-500"
+            }`}
           >
-            Sign up with email
+            {loading ? "Sending..." : "Sign up with email"}
           </button>
         </div>
 
-        <p className="text-xs text-center text-gray-500 mb-4">
-          By clicking the button above, you agree to our{" "}
-          <a href="#" className="underline">Terms of Use</a> and{" "}
-          <a href="#" className="underline">Privacy Policy</a>.
-        </p>
-
         {message && (
-          <div className="text-center text-sm text-red-600 mb-4">{message}</div>
+          <div className="text-center text-sm text-gray-600 mb-4">
+            {message}
+          </div>
         )}
 
         <div className="text-center text-sm">

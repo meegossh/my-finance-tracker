@@ -28,7 +28,7 @@ export default function HomePage() {
   return (
     <main className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
       <div className="w-full max-w-sm bg-white p-6 rounded-lg shadow-md text-center">
-        <div className="text-2xl font-bold mb-2">🍂 Meegossh's Finance App</div>
+        <div className="text-2xl font-bold mb-2">🍂 VitaFin</div>
         <div className="text-lg font-semibold mb-1">Manage your money with ease</div>
         <p className="text-gray-500 mb-6">
           Simple budgeting, smart insights, and total control of your expenses.

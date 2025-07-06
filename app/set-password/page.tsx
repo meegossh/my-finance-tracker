@@ -21,8 +21,9 @@ export default function SetPasswordPage() {
       }
       const { error } = await supabase.auth.verifyOtp({
         token_hash: token,
-        type,
+        type: "magiclink",
       });
+
       if (error) {
         console.error("Verification failed:", error);
         router.push("/auth");
@@ -33,7 +34,6 @@ export default function SetPasswordPage() {
 
     verifyToken();
   }, [router]);
-
   const hasMinLength = password.length >= 8;
   const hasNumber = /\d/.test(password);
   const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);

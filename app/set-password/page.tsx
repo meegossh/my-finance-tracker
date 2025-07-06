@@ -10,18 +10,30 @@ export default function SetPasswordPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get("token");
+    const type = urlParams.get("type");
+
+    const verifyToken = async () => {
+      if (!token || !type) {
+        router.push("/auth");
+        return;
+      }
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: token,
+        type,
+      });
+      if (error) {
+        console.error("Verification failed:", error);
         router.push("/auth");
       } else {
         setLoading(false);
       }
     };
-    checkUser();
+
+    verifyToken();
   }, [router]);
 
-  // validation checks
   const hasMinLength = password.length >= 8;
   const hasNumber = /\d/.test(password);
   const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);
@@ -92,8 +104,6 @@ export default function SetPasswordPage() {
         {message && (
           <p className="mt-4 text-center text-sm">{message}</p>
         )}
-
-
       </div>
     </main>
   );

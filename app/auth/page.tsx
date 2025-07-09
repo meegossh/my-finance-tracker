@@ -1,31 +1,45 @@
 "use client";
 import { useState } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { useSignIn } from "@clerk/nextjs";
 
-export default function AuthPage() {
+export default function LoginPage() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSignup = async () => {
+  const { signIn, setActive, isLoaded } = useSignIn();
+
+  // Password checks for UI feedback
+  const hasMinLength = password.length >= 8;
+  const hasNumber = /\d/.test(password);
+  const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+  const handleLogin = async () => {
     setMessage("");
+
+    if (!isLoaded) {
+      console.log("⏳ Clerk not loaded yet, skipping login.");
+      return;
+    }
+
     setLoading(true);
 
-    console.log("✅ Sending OTP magic link for:", email);
+    try {
+      console.log("✅ Logging in user with Clerk:", email);
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: "https://my-finance-tracker-smoky.vercel.app/set-password"
-      }
-    });
+      const result = await signIn!.create({
+        identifier: email,
+        password: password,
+      });
 
-    if (error) {
-      console.error("❌ Supabase signInWithOtp failed:", error);
-      setMessage(`❌ ${error.message}`);
-    } else {
-      console.log("✅ OTP magic link sent!");
-      setMessage("✅ Check your email for the magic login link!");
+      await setActive!({ session: result.createdSessionId });
+
+      console.log("✅ User logged in and session started!");
+      setMessage("✅ Successfully logged in! Redirecting...");
+    } catch (err: any) {
+      console.error("❌ Clerk login error:", err);
+      setMessage(`❌ ${err.errors?.[0]?.message || "An error occurred"}`);
     }
 
     setLoading(false);
@@ -37,31 +51,11 @@ export default function AuthPage() {
         <div className="flex flex-col items-center mb-6">
           <div className="text-2xl font-bold mb-1">🍂 VitaFin</div>
           <div className="text-lg font-semibold text-center">
-            Sign up to start your free trial
+            Sign in to your account
           </div>
           <p className="text-gray-500 text-center mt-1">
-            Try Finance app free, cancel anytime.
+            Welcome back! Please enter your credentials.
           </p>
-        </div>
-
-        <button
-          className="flex items-center justify-center w-full border rounded py-2 mb-3 hover:bg-gray-100"
-          onClick={() => alert("Apple login not implemented")}
-        >
-          🍏 Continue with Apple
-        </button>
-
-        <button
-          className="flex items-center justify-center w-full border rounded py-2 mb-4 hover:bg-gray-100"
-          onClick={() => alert("Google login not implemented")}
-        >
-          🌐 Continue with Google
-        </button>
-
-        <div className="flex items-center mb-4">
-          <hr className="flex-grow border-gray-300" />
-          <span className="px-2 text-gray-500 text-sm">OR</span>
-          <hr className="flex-grow border-gray-300" />
         </div>
 
         <div className="flex flex-col gap-3 mb-4">
@@ -72,13 +66,38 @@ export default function AuthPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
+          <input
+            className="p-2 border rounded w-full"
+            type="password"
+            placeholder="Your Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <ul className="mb-2 text-sm">
+            <li className={`flex items-center mb-1 ${hasMinLength ? 'text-green-600' : 'text-gray-500'}`}>
+              <span className="mr-2">{hasMinLength ? '✅' : '⚪'}</span>
+              Minimum 8 characters
+            </li>
+            <li className={`flex items-center mb-1 ${hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
+              <span className="mr-2">{hasNumber ? '✅' : '⚪'}</span>
+              At least one number
+            </li>
+            <li className={`flex items-center ${hasSymbol ? 'text-green-600' : 'text-gray-500'}`}>
+              <span className="mr-2">{hasSymbol ? '✅' : '⚪'}</span>
+              At least one symbol
+            </li>
+          </ul>
+
+          {/* Clerk visible CAPTCHA */}
+          <div id="clerk-captcha" className="mb-4"></div>
 
           <button
-            onClick={handleSignup}
-            disabled={loading}
+            onClick={handleLogin}
+            disabled={loading || !isLoaded}
             className="bg-orange-400 text-white py-2 px-4 rounded w-full hover:bg-orange-500 disabled:opacity-50"
           >
-            {loading ? "Sending..." : "Sign up with email"}
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </div>
 
@@ -87,9 +106,9 @@ export default function AuthPage() {
         )}
 
         <div className="text-center text-sm">
-          Already have an account?{" "}
+          Don't have an account?{" "}
           <a href="/auth" className="text-blue-600 hover:underline">
-            Sign in
+            Sign up
           </a>
         </div>
       </div>

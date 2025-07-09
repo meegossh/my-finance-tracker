@@ -1,24 +1,14 @@
 "use client";
-import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
+import { useEffect, useState } from "react";
 
 export default function HomePage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user || null);
-      setLoading(false);
-    };
-    checkUser();
-  }, []);
+  const { isLoaded, isSignedIn, user } = useUser();
 
   const handleGetStarted = () => {
-    if (user) {
+    if (isSignedIn) {
       router.push("/welcome");
     } else {
       router.push("/auth");
@@ -41,9 +31,9 @@ export default function HomePage() {
           Get Started
         </button>
 
-        {!loading && user && (
+        {isLoaded && isSignedIn && (
           <p className="mt-4 text-sm text-green-700">
-            You’re already signed in as <span className="font-semibold">{user.email}</span>
+            You’re already signed in as <span className="font-semibold">{user?.primaryEmailAddress?.emailAddress}</span>
           </p>
         )}
 

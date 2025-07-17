@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
   flexRender,
-  ColumnDef
+  ColumnDef,
+  Row
 } from "@tanstack/react-table";
 import { rankItem } from "@tanstack/match-sorter-utils";
 import { supabase } from "../lib/supabaseClient";
-import debounce from "lodash.debounce";
 import Papa from "papaparse";
 
 interface Expense {
@@ -175,117 +175,82 @@ export default function Transactions() {
   };
 
   const importCSV = async (file: File) => {
-  Papa.parse(file, {
-  header: true,
-  skipEmptyLines: true,
-  delimiter: ",",            // ← enforce comma
-  quoteChar: '"',            // ← enforce quotes for "55,715"
-  transformHeader: header => header.trim().toLowerCase(),
-  complete: async (results) => {
-    const rows = results.data as any[];
-    console.log("First parsed row:", rows[0]); // ⬅️ confirm it's parsed into 6 keys
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      delimiter: ",",
+      quoteChar: '"',
+      transformHeader: header => header.trim().toLowerCase(),
+      complete: async (results) => {
+        const rows = results.data as Record<string, unknown>[];
+        console.log("First parsed row:", rows[0]);
 
-    const { data: existingCategoriesRaw } = await supabase.from("categories").select("*");
-    const { data: existingAccountsRaw } = await supabase.from("accounts").select("id, name");
+        const { data: existingCategoriesRaw } = await supabase.from("categories").select("*");
+        const { data: existingAccountsRaw } = await supabase.from("accounts").select("id, name");
 
-    const existingCategories = existingCategoriesRaw ?? [];
-    const existingAccounts = existingAccountsRaw ?? [];
+        const existingCategories = existingCategoriesRaw ?? [];
+        const existingAccounts = existingAccountsRaw ?? [];
 
-    const newExpenses: Omit<Expense, "id">[] = [];
+        const newExpenses: Omit<Expense, "id">[] = [];
 
-    for (const row of rows) {
-  const {
-    description,
-    place,
-    amount,
-    category,
-    date,
-    account
-  } = row;
+        for (const row of rows) {
+          const description = row["description"] as string | undefined;
+          const place = row["place"] as string | undefined;
+          const amount = row["amount"] as string | undefined;
+          const category = row["category"] as string | undefined;
+          const date = row["date"] as string | undefined;
+          const account = row["account"] as string | undefined;
 
-  // Clean and parse
-  const cleanedAmount = amount ? parseFloat(amount.replace(/,/g, "").trim()) : NaN;
-  const parsedDate = date ? new Date(date) : null;
-  const isoDate = parsedDate && !isNaN(parsedDate.getTime())
-    ? parsedDate.toISOString().substring(0, 10)
-    : null;
+          const cleanedAmount = amount ? parseFloat(amount.replace(/,/g, "").trim()) : NaN;
+          const parsedDate = date ? new Date(date) : null;
+          const isoDate = parsedDate && !isNaN(parsedDate.getTime())
+            ? parsedDate.toISOString().substring(0, 10)
+            : null;
 
-  // Minimal required field check
-  if (typeof description !== "string") {
-  console.warn("Invalid description:", description, row);
-  continue;
-}
+          if (!description || !category || !account || !isoDate || isNaN(cleanedAmount)) continue;
 
-if (typeof category !== "string") {
-  console.warn("Invalid category:", category, row);
-  continue;
-}
+          let category_id = existingCategories.find(c => c.name.toLowerCase() === category.toLowerCase())?.id;
+          if (!category_id) {
+            const { data: createdCat, error: catError } = await supabase
+              .from("categories")
+              .insert({ name: category })
+              .select()
+              .single();
+            if (!catError && createdCat) {
+              category_id = createdCat.id;
+              existingCategories.push(createdCat);
+            } else {
+              continue;
+            }
+          }
 
-if (typeof account !== "string") {
-  console.warn("Invalid account:", account, row);
-  continue;
-}
+          const account_id = existingAccounts.find(a => a.name.toLowerCase() === account.toLowerCase())?.id;
+          if (!account_id) continue;
 
-if (!isoDate) {
-  console.warn("Invalid date:", date, parsedDate, isoDate, row);
-  continue;
-}
+          newExpenses.push({
+            description: description.trim(),
+            category_id,
+            amount: cleanedAmount,
+            date: isoDate,
+            account_id,
+            place: place?.trim() || ""
+          });
+        }
 
-if (isNaN(cleanedAmount)) {
-  console.warn("Invalid amount:", amount, cleanedAmount, row);
-  continue;
-}
-
-  // Get or create category
-  let category_id = existingCategories.find(c => c.name.toLowerCase() === category.toLowerCase())?.id;
-  if (!category_id) {
-    const { data: createdCat, error: catError } = await supabase
-      .from("categories")
-      .insert({ name: category })
-      .select()
-      .single();
-    if (!catError && createdCat) {
-      category_id = createdCat.id;
-      existingCategories.push(createdCat);
-    } else {
-      console.error("Failed to create category:", category);
-      continue;
-    }
-  }
-
-  // Find account
-  const account_id = existingAccounts.find(a => a.name.toLowerCase() === account.toLowerCase())?.id;
-  if (!account_id) {
-    console.warn("Skipping row due to unknown account:", row);
-    continue;
-  }
-
-  newExpenses.push({
-    description: description.trim(),
-    category_id,
-    amount: cleanedAmount,
-    date: isoDate,
-    account_id,
-    place: place?.trim() || ""
-  });
-}
-
-
-    if (newExpenses.length > 0) {
-      const { data: inserted, error } = await supabase.from("expenses").insert(newExpenses).select();
-      if (error) {
-        console.error("Failed to insert expenses:", error.message);
-      } else {
-        setData(prev => [...prev, ...(inserted ?? [])]);
-        alert(`${inserted?.length ?? 0} expenses imported successfully.`);
+        if (newExpenses.length > 0) {
+          const { data: inserted, error } = await supabase.from("expenses").insert(newExpenses).select();
+          if (error) {
+            console.error("Failed to insert expenses:", error.message);
+          } else {
+            setData(prev => [...prev, ...(inserted ?? [])]);
+            alert(`${inserted?.length ?? 0} expenses imported successfully.`);
+          }
+        } else {
+          alert("No valid rows to import.");
+        }
       }
-    } else {
-      alert("No valid rows to import.");
-    }
-  }
-});
-};
-
+    });
+  };
 
   const exportCSV = () => {
     const headers = ["Description", "Category", "Amount", "Date", "Account"];
@@ -304,55 +269,52 @@ if (isNaN(cleanedAmount)) {
     link.click();
   };
 
-  const fuzzyFilter = (row: any, columnId: string, value: string) =>
+  const fuzzyFilter = (row: Row<Expense>, columnId: string, value: string) =>
     rankItem(row.getValue(columnId), value).passed;
 
   const columns: ColumnDef<Expense>[] = [
-  {
-    id: "select",
-    header: () => <input type="checkbox" checked={selectedRows.size === data.length} onChange={toggleSelectAll} />,
-    cell: ({ row }) => (
-      <input
-        type="checkbox"
-        checked={selectedRows.has(row.original.id)}
-        onChange={() => toggleSelectRow(row.original.id)}
-      />
-    )
-  },
-  {
-    header: "Description",
-    accessorKey: "description",
-    cell: ({ getValue }) => <span>{getValue() as string}</span>
-  },
     {
-    header: "Place", // ← Add this column
-    accessorKey: "place",
-    cell: ({ getValue }) => <span>{getValue() as string}</span>
-  },
+      id: "select",
+      header: () => <input type="checkbox" checked={selectedRows.size === data.length} onChange={toggleSelectAll} />,
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={selectedRows.has(row.original.id)}
+          onChange={() => toggleSelectRow(row.original.id)}
+        />
+      )
+    },
     {
-    header: "Date",
-    accessorKey: "date",
-    cell: ({ getValue }) => <span>{getValue() as string}</span>
-  },
-  {
-    header: "Category",
-    accessorKey: "category_id",
-    cell: ({ getValue }) => <span>{categories.find(c => c.id === getValue())?.name || ""}</span>
-  },
-  {
-    header: "Account",
-    accessorKey: "account_id",
-    cell: ({ getValue }) => <span>{accounts.find(a => a.id === getValue())?.name || ""}</span>
-  },
-  {
-    header: "Amount",
-    accessorKey: "amount",
-    cell: ({ getValue }) => <span>${Number(getValue()).toFixed(2)}</span>
-  }
-
-
-];
-
+      header: "Description",
+      accessorKey: "description",
+      cell: ({ getValue }) => <span>{getValue() as string}</span>
+    },
+    {
+      header: "Place",
+      accessorKey: "place",
+      cell: ({ getValue }) => <span>{getValue() as string}</span>
+    },
+    {
+      header: "Date",
+      accessorKey: "date",
+      cell: ({ getValue }) => <span>{getValue() as string}</span>
+    },
+    {
+      header: "Category",
+      accessorKey: "category_id",
+      cell: ({ getValue }) => <span>{categories.find(c => c.id === getValue())?.name || ""}</span>
+    },
+    {
+      header: "Account",
+      accessorKey: "account_id",
+      cell: ({ getValue }) => <span>{accounts.find(a => a.id === getValue())?.name || ""}</span>
+    },
+    {
+      header: "Amount",
+      accessorKey: "amount",
+      cell: ({ getValue }) => <span>${Number(getValue()).toFixed(2)}</span>
+    }
+  ];
 
   const table = useReactTable({
     data,

@@ -12,8 +12,13 @@ import {
   ResponsiveContainer
 } from "recharts";
 
+type BalanceItem = {
+  date: string;
+  total: number;
+};
+
 export default function Reports() {
-  const [balanceData, setBalanceData] = useState<any[]>([]);
+  const [balanceData, setBalanceData] = useState<BalanceItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,16 +30,19 @@ export default function Reports() {
 
       if (error) {
         console.error("Error fetching balance history:", error);
-      } else {
-        const groupedByDate = data.reduce((acc: any, curr: any) => {
-          const date = curr.snapshot_date.substring(0, 10);
-          acc[date] = (acc[date] || 0) + curr.balance;
-          return acc;
-        }, {});
+      } else if (data) {
+        const groupedByDate = data.reduce(
+          (acc: Record<string, number>, curr: { snapshot_date: string; balance: number }) => {
+            const date = curr.snapshot_date.substring(0, 10);
+            acc[date] = (acc[date] || 0) + curr.balance;
+            return acc;
+          },
+          {}
+        );
 
-        const result = Object.entries(groupedByDate).map(([date, total]) => ({
+        const result: BalanceItem[] = Object.entries(groupedByDate).map(([date, total]) => ({
           date,
-          total: Number(total)
+          total
         }));
 
         setBalanceData(result);

@@ -18,7 +18,7 @@ import {
 type SidebarProps = {
   selected: string;
   setSelected: (value: string) => void;
-  user: any;
+  user: { email?: string | null }; // ✅ Replaced `any`
 };
 
 const menuItems = [

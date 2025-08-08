@@ -13,17 +13,27 @@ import Goals from "@/components/goals";
 import Investments from "@/components/investments";
 import Settings from "@/components/settings";
 
+export type Page =
+  | "Dashboard"
+  | "Accounts"
+  | "Transactions"
+  | "Cash Flow"
+  | "Reports"
+  | "Budget"
+  | "Recurring"
+  | "Goals"
+  | "Investments"
+  | "Settings";
+
 export default function Welcome() {
-  const [selected, setSelected] = useState("Dashboard");
-  const userInfo = { email: "guest@vitafin.com" }; // Mocked Supabase user
+  const [selected, setSelected] = useState<Page>("Dashboard");
+  const userInfo = { email: "guest@vitafin.com" };
 
   return (
-    <div className="flex h-screen bg-[#f3f4f6]">
-      {/* Sidebar should be FIRST */}
+    <div className="flex h-screen bg-[#f3f4f6] dark:bg-zinc-900 transition-colors">
       <Sidebar selected={selected} setSelected={setSelected} user={userInfo} />
 
-      {/* Main content on the RIGHT of sidebar */}
-      <div className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 p-6 sm:p-8 overflow-y-auto">
         {selected === "Dashboard" && <Dashboard />}
         {selected === "Accounts" && <Accounts />}
         {selected === "Transactions" && <Transactions />}
@@ -34,7 +44,7 @@ export default function Welcome() {
         {selected === "Goals" && <Goals />}
         {selected === "Investments" && <Investments />}
         {selected === "Settings" && <Settings />}
-      </div>
+      </main>
     </div>
   );
 }

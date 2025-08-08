@@ -1,454 +1,772 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+// ===== UI helpers (glass) =====
+function Card({
+  className = "",
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={[
+        "rounded-2xl border p-4 shadow-xl",
+        "border-white/30 bg-white/60 backdrop-blur-2xl",
+        "dark:border-zinc-700/40 dark:bg-zinc-900/50",
+        className,
+      ].join(" ")}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ModalShell({
+  title,
+  onClose,
+  children,
+  className = "",
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div
+        className={[
+          "relative mx-auto w-full max-w-md rounded-2xl p-6 shadow-2xl",
+          "border border-white/30 bg-white/80 backdrop-blur-2xl",
+          "dark:border-zinc-700/40 dark:bg-zinc-900/80",
+          className,
+        ].join(" ")}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            {title}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+          >
+            ✕
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ===== Types =====
 interface Recurring {
   id: string;
   name: string;
-  amount: number;
-  frequency: string;
-  actual_amount: number; 
-  start_date: string;
+  amount: number; // budgeted
+  frequency: "Weekly" | "Semi-Monthly" | "Monthly" | "Yearly";
+  start_date: string; // yyyy-mm-dd
   end_date: string | null;
-  currency: string;
+  currency: "USD" | "CRC";
   created_at: string;
 }
 
-export default function Recurring() {
+interface RecurringPayment {
+  id: string;
+  recurring_id: string;
+  date: string; // yyyy-mm-dd
+  actual_amount: number | null;
+  notes: string | null;
+  is_paid: boolean;
+  account_id: string | null;
+  created_at: string;
+}
+
+interface Account {
+  id: string;
+  name: string;
+  balance: number;
+  currency: "USD" | "CRC";
+}
+
+// ===== Helpers =====
+const startOfMonth = (y: number, m: number) => new Date(y, m, 1);
+const endOfMonth = (y: number, m: number) => new Date(y, m + 1, 0);
+const toISO = (d: Date) =>
+  new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+const money = (n: number, c: "USD" | "CRC") =>
+  c === "CRC"
+    ? `₡${n.toLocaleString()}`
+    : `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+export default function RecurringPage() {
+  // Month selector
   const today = new Date();
   const [month, setMonth] = useState(today.getMonth());
   const [year, setYear] = useState(today.getFullYear());
 
+  // Data
   const [recurrings, setRecurrings] = useState<Recurring[]>([]);
+  const [payments, setPayments] = useState<RecurringPayment[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
 
+  // Filters
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid">(
+    "all"
+  );
+  const [accountFilter, setAccountFilter] = useState<string>("");
+
+  // Modal (create recurring)
+  const [showModal, setShowModal] = useState(false);
   const [name, setName] = useState("");
   const [amount, setAmount] = useState<number | "">("");
-  const [frequency, setFrequency] = useState("Monthly");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [currency, setCurrency] = useState("USD");
-
-  const [crcToUsd, setCrcToUsd] = useState(500); // Default fallback
+  const [frequency, setFrequency] =
+    useState<Recurring["frequency"]>("Monthly");
+  const [startDate, setStartDate] = useState<string>(toISO(new Date()));
+  const [endDate, setEndDate] = useState<string>("");
+  const [currency, setCurrency] = useState<"USD" | "CRC">("USD");
 
   useEffect(() => {
-    fetchRecurrings();
-    fetchExchangeRate();
+    const load = async () => {
+      setLoading(true);
+      const [{ data: r }, { data: p }, { data: a }] = await Promise.all([
+        supabase
+          .from("recurrings")
+          .select("*")
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("recurring_payments")
+          .select("*")
+          .order("date", { ascending: true }),
+        supabase
+          .from("accounts")
+          .select("id, name, balance, currency")
+          .order("name"),
+      ]);
+      setRecurrings(r || []);
+      setPayments(p || []);
+      setAccounts(a || []);
+      setLoading(false);
+    };
+    load();
   }, []);
 
-  const fetchExchangeRate = async () => {
-    try {
-      const res = await fetch("https://api.exchangerate.host/latest?base=CRC&symbols=USD");
-      const data = await res.json();
-      if (data?.rates?.USD) {
-        setCrcToUsd(data.rates.USD);
+  // Month-scope
+  const monthStart = useMemo(() => startOfMonth(year, month), [year, month]);
+  const monthEnd = useMemo(() => endOfMonth(year, month), [year, month]);
+  const monthLabel = new Date(year, month, 1).toLocaleString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
+  // Join month instances with recurring meta
+  const baseRows = useMemo(() => {
+    const startISO = toISO(monthStart);
+    const endISO = toISO(monthEnd);
+    return payments
+      .filter((p) => p.date >= startISO && p.date <= endISO)
+      .map((p) => ({
+        payment: p,
+        recurring: recurrings.find((r) => r.id === p.recurring_id)!,
+      }))
+      .filter((x) => !!x.recurring);
+  }, [payments, recurrings, monthStart, monthEnd]);
+
+  const filteredRows = useMemo(() => {
+    return baseRows
+      .filter((row) =>
+        statusFilter === "pending"
+          ? !row.payment.is_paid
+          : statusFilter === "paid"
+          ? row.payment.is_paid
+          : true
+      )
+      .filter((row) =>
+        accountFilter ? row.payment.account_id === accountFilter : true
+      )
+      .sort((a, b) => a.payment.date.localeCompare(b.payment.date));
+  }, [baseRows, statusFilter, accountFilter]);
+
+  // Summary totals
+  const totals = useMemo(() => {
+    let budgetUSD = 0,
+      actualUSD = 0,
+      budgetCRC = 0,
+      actualCRC = 0;
+    for (const row of filteredRows) {
+      const budget = row.recurring.amount;
+      const actual = row.payment.actual_amount ?? budget;
+      if (row.recurring.currency === "USD") {
+        budgetUSD += budget;
+        actualUSD += actual;
+      } else {
+        budgetCRC += budget;
+        actualCRC += actual;
       }
-    } catch (err) {
-      console.error("Error fetching exchange rate:", err);
     }
-  };
+    return { budgetUSD, actualUSD, budgetCRC, actualCRC };
+  }, [filteredRows]);
 
-  const currencySymbol = (code: string) => {
-    switch (code) {
-      case "CRC":
-        return "₡";
-      case "USD":
-      default:
-        return "$";
+  // Calendar buckets (support N items same day)
+  const firstDay = useMemo(() => new Date(year, month, 1), [year, month]);
+  const daysInMonth = useMemo(
+    () => new Date(year, month + 1, 0).getDate(),
+    [year, month]
+  );
+  const startOffset = useMemo(() => firstDay.getDay(), [firstDay]); // 0=Sun
+  const paymentsByDay = useMemo(() => {
+    const map: Record<
+      number,
+      { payment: RecurringPayment; recurring: Recurring }[]
+    > = {};
+    for (const r of baseRows) {
+      const d = new Date(r.payment.date);
+      const day = d.getDate();
+      if (!map[day]) map[day] = [];
+      map[day].push(r);
     }
-  };
+    Object.values(map).forEach((arr) =>
+      arr.sort((a, b) => a.recurring.name.localeCompare(b.recurring.name))
+    );
+    return map;
+  }, [baseRows, year, month]);
 
-  const parseLocalDate = (str: string) => {
-    const [y, m, d] = str.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  };
-
-  const fetchRecurrings = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from("recurrings").select("*");
-    if (error) {
-      console.error("Error fetching recurrings:", error);
-    } else {
-      setRecurrings(data || []);
-    }
-    setLoading(false);
-  };
-
+  // Create recurring + refresh
   const addRecurring = async () => {
-  const finalStart = startDate || new Date().toISOString().substring(0, 10);
-  const value = typeof amount === "number" ? amount : 0;
+    const sd = startDate || toISO(new Date());
+    const { data: inserted, error } = await supabase
+      .from("recurrings")
+      .insert([
+        {
+          name,
+          amount: Number(amount || 0),
+          frequency,
+          start_date: sd,
+          end_date: endDate || null,
+          currency,
+        },
+      ])
+      .select()
+      .single();
 
-  const { error } = await supabase.from("recurrings").insert([
-    {
-      name,
-      amount: value, // budgeted amount
-      actual_amount: value, // default actual = budgeted
-      frequency,
-      start_date: finalStart,
-      end_date: endDate || null,
-      currency,
-    },
-  ]);
+    if (error || !inserted) {
+      console.error(error);
+      return;
+    }
 
-  if (error) {
-    console.error("Insert error:", error);
-  } else {
+    setShowModal(false);
     setName("");
     setAmount("");
     setFrequency("Monthly");
-    setStartDate("");
+    setStartDate(toISO(new Date()));
     setEndDate("");
     setCurrency("USD");
-    setShowModal(false);
-    fetchRecurrings();
-  }
-};
 
-  const deleteRecurring = async (id: string) => {
-    const { error } = await supabase.from("recurrings").delete().eq("id", id);
-    if (error) console.error("Delete error:", error);
-    else fetchRecurrings();
+    const [{ data: r }, { data: p }] = await Promise.all([
+      supabase
+        .from("recurrings")
+        .select("*")
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("recurring_payments")
+        .select("*")
+        .order("date", { ascending: true }),
+    ]);
+    setRecurrings(r || []);
+    setPayments(p || []);
   };
 
-  const sumByCurrency = (
-    recurrings: Recurring[],
-    targetMonth: number,
-    targetYear: number
+  // Update actual amount per instance
+  const updateActual = async (paymentId: string, nextVal: number) => {
+    const { error } = await supabase
+      .from("recurring_payments")
+      .update({ actual_amount: nextVal })
+      .eq("id", paymentId);
+    if (!error)
+      setPayments((prev) =>
+        prev.map((p) => (p.id === paymentId ? { ...p, actual_amount: nextVal } : p))
+      );
+  };
+
+  // Mark paid (deduct account, snapshot, optional expense, set flag)
+  const markPaid = async (
+    row: { payment: RecurringPayment; recurring: Recurring },
+    accountId: string
   ) => {
-    let usd = 0;
-    let crc = 0;
+    const acc = accounts.find((a) => a.id === accountId);
+    if (!acc) return;
 
-    recurrings.forEach((r) => {
-      const start = parseLocalDate(r.start_date);
-      const end = r.end_date ? parseLocalDate(r.end_date) : null;
+    const amt = Number(row.payment.actual_amount ?? row.recurring.amount);
 
-      const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
-      const scheduledDay = Math.min(start.getDate(), lastDay);
-      const occurrenceDate = new Date(targetYear, targetMonth, scheduledDay);
+    // Currency check
+    if (acc.currency !== row.recurring.currency) {
+      const proceed = confirm(
+        `La cuenta (${acc.currency}) no coincide con la moneda del recurrente (${row.recurring.currency}). ¿Deseas continuar sin conversión?`
+      );
+      if (!proceed) return;
+    }
 
-      if (occurrenceDate < start || (end && occurrenceDate > end)) return;
+    // Balance check
+    if ((acc.balance || 0) < amt) {
+      const proceed = confirm(
+        `Saldo insuficiente en la cuenta "${acc.name}". Balance: ${money(
+          acc.balance || 0,
+          acc.currency
+        )} – Cargo: ${money(amt, acc.currency)}. ¿Continuar de todas formas?`
+      );
+      if (!proceed) return;
+    }
 
-      if (r.currency === "USD") usd += r.amount;
-      else if (r.currency === "CRC") crc += r.amount;
-    });
+    // 1) Deduct from account
+    const newBalance = (acc.balance || 0) - amt;
+    const { error: upErr } = await supabase
+      .from("accounts")
+      .update({ balance: newBalance })
+      .eq("id", acc.id);
+    if (upErr) {
+      console.error(upErr);
+      return;
+    }
+    setAccounts((prev) =>
+      prev.map((a) => (a.id === acc.id ? { ...a, balance: newBalance } : a))
+    );
 
-    return {
-      usd,
-      crc,
-      combined: usd + crc / crcToUsd,
-    };
+    // 2) Snapshot
+    await supabase.from("account_balances").insert([
+      { account_id: acc.id, balance: newBalance, recorded_at: toISO(new Date()) },
+    ]);
+
+    // 3) Optional: register expense
+    try {
+      await supabase.from("expenses").insert([
+        {
+          description: `Recurring: ${row.recurring.name}`,
+          category_id: null,
+          amount: amt,
+          date: row.payment.date,
+          account_id: acc.id,
+          place: "Recurring",
+        },
+      ]);
+    } catch (_) {
+      // ignore
+    }
+
+    // 4) Set paid flag + account used
+    const { error: pe } = await supabase
+      .from("recurring_payments")
+      .update({ is_paid: true, account_id: acc.id })
+      .eq("id", row.payment.id);
+    if (!pe)
+      setPayments((prev) =>
+        prev.map((p) =>
+          p.id === row.payment.id ? { ...p, is_paid: true, account_id: acc.id } : p
+        )
+      );
   };
 
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const startOffset = new Date(year, month, 1).getDay();
-  const paymentsByDay: Record<number, Recurring[]> = {};
-
-  recurrings.forEach((r) => {
-    const start = parseLocalDate(r.start_date);
-    const end = r.end_date ? parseLocalDate(r.end_date) : null;
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const current = new Date(year, month, day);
-      if (end && current > end) continue;
-
-      const startDay = start.getDate();
-      const dayOfWeek = start.getDay();
-
-      const shouldInclude = (() => {
-        switch (r.frequency) {
-          case "Monthly":
-            return current.getDate() === Math.min(
-              startDay,
-              new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate()
-            );
-          case "Weekly":
-            return current >= start && current.getDay() === dayOfWeek;
-          case "Semi-Monthly":
-            const secondDay = startDay + 15;
-            return (
-              current >= start &&
-              (current.getDate() === startDay ||
-                current.getDate() === Math.min(secondDay, daysInMonth))
-            );
-          case "Yearly":
-            return (
-              current.getDate() === startDay &&
-              current.getMonth() === start.getMonth()
-            );
-          default:
-            return false;
-        }
-      })();
-
-      if (shouldInclude) {
-        if (!paymentsByDay[day]) paymentsByDay[day] = [];
-        paymentsByDay[day].push(r);
-      }
-    }
-  });
-
-  const { usd, crc, combined } = sumByCurrency(recurrings, month, year);
-
+  // ===== UI =====
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold mb-2">
-            Recurring Calendar -{" "}
-            {new Date(year, month).toLocaleString("default", {
-              month: "long",
-              year: "numeric",
-            })}
-          </h2>
-          <div className="flex gap-2">
-            <select
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              className="border p-2 rounded"
-            >
-              {Array.from({ length: 12 }).map((_, idx) => (
-                <option key={idx} value={idx}>
-                  {new Date(0, idx).toLocaleString("default", {
-                    month: "long",
-                  })}
-                </option>
-              ))}
-            </select>
-            <select
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              className="border p-2 rounded"
-            >
-              {Array.from({ length: 10 }).map((_, idx) => {
-                const y = today.getFullYear() - 2 + idx;
-                return (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-        </div>
-
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded"
-        >
-          + Add Recurring
-        </button>
-      </div>
-
-      {/* ✅ Overview Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div className="border rounded-lg p-4 bg-white shadow">
-          <div className="text-sm text-gray-500">Monthly USD Expenses</div>
-          <div className="text-xl font-semibold text-red-500">
-            ${usd.toFixed(2)}
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-white shadow">
-          <div className="text-sm text-gray-500">Monthly CRC Expenses</div>
-          <div className="text-xl font-semibold text-red-500">
-            ₡{crc.toLocaleString()}
-          </div>
-        </div>
-        <div className="border rounded-lg p-4 bg-white shadow">
-          <div className="text-sm text-gray-500">Total Expenses in USD</div>
-          <div className="text-xl font-semibold text-red-700">
-            ${combined.toFixed(2)}{" "}
-            <span className="text-xs text-gray-400">(incl. CRC)</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Weekday headers */}
-      <div className="grid grid-cols-7 gap-4 text-center font-medium text-gray-600 mb-2">
-        <div>Sun</div>
-        <div>Mon</div>
-        <div>Tue</div>
-        <div>Wed</div>
-        <div>Thu</div>
-        <div>Fri</div>
-        <div>Sat</div>
-      </div>
-
-      {/* Calendar */}
-      <div className="grid grid-cols-7 gap-4 mb-8">
-        {Array.from({ length: startOffset }).map((_, i) => (
-          <div key={`offset-${i}`} />
-        ))}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const day = i + 1;
-          const dayPayments = paymentsByDay[day] || [];
-
-          return (
-            <div
-              key={day}
-              className="border rounded-xl p-3 shadow-sm hover:bg-gray-50 transition duration-200"
-            >
-              <div className="text-sm text-gray-500">{day}</div>
-              {dayPayments.map((p) => (
-                <div
-                  key={p.id}
-                  className="mt-2 bg-orange-100 text-orange-800 text-xs rounded px-2 py-1"
-                >
-                  {p.name} {currencySymbol(p.currency)}
-                  {p.amount}
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Recurring List */}
-      <div className="mt-8">
-  <h3 className="text-lg font-semibold mb-2">Recurring List</h3>
-  <div className="border rounded-lg">
-    <div className="grid grid-cols-6 font-semibold text-sm bg-gray-100 p-3 border-b">
-      <div>Name</div>
-      <div>Frequency</div>
-      <div>Start / End</div>
-      <div className="text-right">Budgeted</div>
-      <div className="text-right">Actual</div>
-      <div className="text-right">Actions</div>
-    </div>
-
-    {loading && <div className="p-3 text-sm text-gray-500">Loading...</div>}
-    {!loading && recurrings.length === 0 && (
-      <div className="p-3 text-sm text-gray-500">No recurring payments yet.</div>
-    )}
-
-    {!loading &&
-      recurrings.map((p) => (
-        <div
-          key={p.id}
-          className="grid grid-cols-6 items-center text-sm px-3 py-2 border-t"
-        >
-          <div>{p.name}</div>
-          <div>{p.frequency}</div>
+    <div className="mx-auto max-w-7xl p-6 sm:p-8 bg-inherit space-y-6">
+      {/* Header */}
+      <Card>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            {p.start_date}
-            {p.end_date && ` - ${p.end_date}`}
+            <h1 className="text-2xl md:text-3xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">
+              Recurring Payments
+            </h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Vista mensual, calendario y lista. Budget vs Actual, estado y cuenta usada.
+            </p>
           </div>
-          <div className="text-right">
-            {currencySymbol(p.currency)}
-            {p.amount}
-          </div>
-          <div className="text-right">
-            <input
-              type="number"
-              defaultValue={p.actual_amount}
-              className="border px-2 py-1 w-20 text-right rounded text-sm"
-              onBlur={async (e) => {
-                const newVal = parseFloat(e.target.value);
-                if (!isNaN(newVal) && newVal !== p.actual_amount) {
-                  const { error } = await supabase
-                    .from("recurrings")
-                    .update({ actual_amount: newVal })
-                    .eq("id", p.id);
-                  if (!error) fetchRecurrings();
-                }
-              }}
-            />
-          </div>
-          <div className="text-right">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                className="h-9 rounded-xl border border-white/30 bg-white/70 px-3 text-sm shadow-sm backdrop-blur transition hover:bg-white dark:border-zinc-700/40 dark:bg-zinc-800/60"
+                onClick={() => setMonth((m) => (m === 0 ? 11 : m - 1))}
+              >
+                ◀
+              </button>
+              <div className="min-w-[180px] rounded-xl border border-white/30 bg-white/60 px-3 py-2 text-center font-medium shadow-sm backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60">
+                {monthLabel}
+              </div>
+              <button
+                className="h-9 rounded-xl border border-white/30 bg-white/70 px-3 text-sm shadow-sm backdrop-blur transition hover:bg-white dark:border-zinc-700/40 dark:bg-zinc-800/60"
+                onClick={() => setMonth((m) => (m === 11 ? 0 : m + 1))}
+              >
+                ▶
+              </button>
+            </div>
             <button
-              onClick={() => deleteRecurring(p.id)}
-              className="text-red-500 hover:underline text-xs"
+              className="rounded-xl bg-gradient-to-tr from-blue-600 to-fuchsia-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+              onClick={() => setShowModal(true)}
             >
-              Delete
+              + Add Recurring
             </button>
           </div>
         </div>
-      ))}
-  </div>
-</div>
+      </Card>
 
+      {/* Filters */}
+      <Card>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            className="h-9 rounded-xl border border-white/30 bg-white/70 px-3 text-sm shadow-sm backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+          >
+            <option value="all">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="paid">Paid</option>
+          </select>
+          <select
+            className="h-9 rounded-xl border border-white/30 bg-white/70 px-3 text-sm shadow-sm backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value)}
+          >
+            <option value="">All accounts</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </Card>
 
-      {/* Modal */}
+      {/* Summary */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <Card>
+          <div className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Budget USD
+          </div>
+          <div className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+            ${totals.budgetUSD.toLocaleString()}
+          </div>
+        </Card>
+        <Card>
+          <div className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Actual USD
+          </div>
+          <div className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+            ${totals.actualUSD.toLocaleString()}
+          </div>
+        </Card>
+        <Card>
+          <div className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Budget CRC
+          </div>
+          <div className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+            ₡{totals.budgetCRC.toLocaleString()}
+          </div>
+        </Card>
+        <Card>
+          <div className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Actual CRC
+          </div>
+          <div className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+            ₡{totals.actualCRC.toLocaleString()}
+          </div>
+        </Card>
+      </div>
+
+      {/* Calendar */}
+      <Card>
+        <div className="mb-2 grid grid-cols-7 gap-2 text-center text-xs font-medium text-zinc-600 dark:text-zinc-300">
+          <div>Sun</div>
+          <div>Mon</div>
+          <div>Tue</div>
+          <div>Wed</div>
+          <div>Thu</div>
+          <div>Fri</div>
+          <div>Sat</div>
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {Array.from({ length: startOffset }).map((_, i) => (
+            <div
+              key={`off-${i}`}
+              className="h-28 rounded-xl border border-white/30 bg-white/40 backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/40"
+            />
+          ))}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const day = i + 1;
+            const items = paymentsByDay[day] || [];
+            return (
+              <div
+                key={day}
+                className={[
+                  "h-28 rounded-xl border p-2 overflow-hidden",
+                  "border-white/30 bg-white/60 backdrop-blur",
+                  "dark:border-zinc-700/40 dark:bg-zinc-900/40",
+                ].join(" ")}
+              >
+                <div className="mb-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  {day}
+                </div>
+                <div className="h-[calc(100%-18px)] space-y-1 overflow-y-auto pr-1">
+                  {items.length === 0 ? (
+                    <div className="text-[11px] text-zinc-400">—</div>
+                  ) : (
+                    items.map(({ payment, recurring }) => {
+                      const budget = recurring.amount;
+                      const actual = payment.actual_amount ?? budget;
+                      const variance = (actual - budget) || 0;
+                      return (
+                        <div
+                          key={payment.id}
+                          className={[
+                            "flex items-center justify-between rounded-md px-2 py-1 text-[11px]",
+                            "border border-white/30 bg-white/70 backdrop-blur",
+                            "dark:border-zinc-700/40 dark:bg-zinc-800/60",
+                          ].join(" ")}
+                          title={recurring.name}
+                        >
+                          <span className="truncate">{recurring.name}</span>
+                          <span
+                            className={[
+                              "tabular-nums",
+                              variance > 0
+                                ? "text-rose-600"
+                                : variance < 0
+                                ? "text-emerald-600"
+                                : "",
+                            ].join(" ")}
+                          >
+                            {recurring.currency === "USD" ? `$${actual}` : `₡${actual}`}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* Table */}
+      <div
+        className={[
+          "overflow-x-auto rounded-2xl border shadow-xl",
+          "border-white/30 bg-white/70 backdrop-blur-2xl",
+          "dark:border-zinc-700/40 dark:bg-zinc-900/50",
+        ].join(" ")}
+      >
+        {loading ? (
+          <div className="p-6 text-zinc-500 dark:text-zinc-400">Loading…</div>
+        ) : filteredRows.length === 0 ? (
+          <div className="p-6 text-zinc-500 dark:text-zinc-400">
+            No recurring instances para este mes con los filtros actuales.
+          </div>
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr>
+                <th className="border-b border-white/30 px-3 py-3 text-left font-semibold text-zinc-600 dark:border-zinc-700/40 dark:text-zinc-300">
+                  Date
+                </th>
+                <th className="border-b border-white/30 px-3 py-3 text-left font-semibold text-zinc-600 dark:border-zinc-700/40 dark:text-zinc-300">
+                  Name
+                </th>
+                <th className="border-b border-white/30 px-3 py-3 text-center font-semibold text-zinc-600 dark:border-zinc-700/40 dark:text-zinc-300">
+                  Freq
+                </th>
+                <th className="border-b border-white/30 px-3 py-3 text-right font-semibold text-zinc-600 dark:border-zinc-700/40 dark:text-zinc-300">
+                  Budget
+                </th>
+                <th className="border-b border-white/30 px-3 py-3 text-right font-semibold text-zinc-600 dark:border-zinc-700/40 dark:text-zinc-300">
+                  Actual
+                </th>
+                <th className="border-b border-white/30 px-3 py-3 text-right font-semibold text-zinc-600 dark:border-zinc-700/40 dark:text-zinc-300">
+                  Variance
+                </th>
+                <th className="border-b border-white/30 px-3 py-3 text-left font-semibold text-zinc-600 dark:border-zinc-700/40 dark:text-zinc-300">
+                  Pay with
+                </th>
+                <th className="border-b border-white/30 px-3 py-3 text-left font-semibold text-zinc-600 dark:border-zinc-700/40 dark:text-zinc-300">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.map((row) => {
+                const { payment, recurring } = row;
+                const budget = recurring.amount;
+                const actual = payment.actual_amount ?? budget;
+                const variance = (actual - budget) || 0;
+                return (
+                  <tr
+                    key={payment.id}
+                    className="transition hover:bg-white/60 dark:hover:bg-zinc-800/40"
+                  >
+                    <td className="border-b border-white/30 px-3 py-3 align-top dark:border-zinc-700/40">
+                      {payment.date}
+                    </td>
+                    <td className="border-b border-white/30 px-3 py-3 align-top dark:border-zinc-700/40">
+                      {recurring.name}
+                    </td>
+                    <td className="border-b border-white/30 px-3 py-3 text-center align-top dark:border-zinc-700/40">
+                      {recurring.frequency}
+                    </td>
+                    <td className="border-b border-white/30 px-3 py-3 text-right align-top dark:border-zinc-700/40">
+                      {money(budget, recurring.currency)}
+                    </td>
+                    <td className="border-b border-white/30 px-3 py-3 text-right align-top dark:border-zinc-700/40">
+                      <input
+                        type="number"
+                        className="w-28 rounded-lg border border-white/30 bg-white/70 px-2 py-1 text-right text-sm shadow-sm outline-none backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
+                        defaultValue={actual}
+                        onBlur={(e) => {
+                          const v = parseFloat(e.currentTarget.value);
+                          if (!isNaN(v) && v !== actual) updateActual(payment.id, v);
+                        }}
+                      />
+                    </td>
+                    <td
+                      className={[
+                        "border-b border-white/30 px-3 py-3 text-right align-top tabular-nums dark:border-zinc-700/40",
+                        variance > 0
+                          ? "text-rose-600"
+                          : variance < 0
+                          ? "text-emerald-600"
+                          : "",
+                      ].join(" ")}
+                    >
+                      {money(variance, recurring.currency)}
+                    </td>
+                    <td className="border-b border-white/30 px-3 py-3 align-top dark:border-zinc-700/40">
+                      <select
+                        className="rounded-lg border border-white/30 bg-white/70 px-2 py-1 text-sm shadow-sm outline-none backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
+                        defaultValue={payment.account_id || ""}
+                        id={`pay-${payment.id}`}
+                      >
+                        <option value="">Select account</option>
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="border-b border-white/30 px-3 py-3 align-top dark:border-zinc-700/40">
+                      {payment.is_paid ? (
+                        <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-900/30 dark:text-emerald-300">
+                          Paid
+                        </span>
+                      ) : (
+                        <button
+                          className="rounded-xl border border-white/30 bg-white/70 px-3 py-1 text-sm shadow-sm transition hover:bg-white dark:border-zinc-700/40 dark:bg-zinc-800/60"
+                          onClick={() => {
+                            const sel = document.getElementById(
+                              `pay-${payment.id}`
+                            ) as HTMLSelectElement | null;
+                            const accId = sel?.value || "";
+                            if (!accId) {
+                              alert("Selecciona una cuenta para pagar.");
+                              return;
+                            }
+                            markPaid(row, accId);
+                          }}
+                        >
+                          Mark paid
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Add recurring modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Add Recurring Payment</h2>
-
-            <label className="block text-sm font-medium mb-1">Name</label>
+        <ModalShell title="Add Recurring Payment" onClose={() => setShowModal(false)}>
+          <div className="space-y-3">
             <input
-              type="text"
-              placeholder="Netflix"
+              className="w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm shadow-sm outline-none backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
+              placeholder="Name (e.g., Electricity)"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="border p-2 rounded w-full mb-3"
             />
-
-            <label className="block text-sm font-medium mb-1">Amount</label>
-            <input
-              type="number"
-              placeholder="25"
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              className="border p-2 rounded w-full mb-3"
-            />
-
-            <label className="block text-sm font-medium mb-1">Currency</label>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                className="rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm shadow-sm outline-none backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
+                type="number"
+                placeholder="Budgeted amount"
+                value={amount}
+                onChange={(e) => setAmount(Number(e.target.value))}
+              />
+              <select
+                className="rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm shadow-sm outline-none backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as any)}
+              >
+                <option value="USD">USD ($)</option>
+                <option value="CRC">CRC (₡)</option>
+              </select>
+            </div>
             <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              className="border p-2 rounded w-full mb-3"
-            >
-              <option value="USD">USD ($)</option>
-              <option value="CRC">CRC (₡)</option>
-            </select>
-
-            <label className="block text-sm font-medium mb-1">Frequency</label>
-            <select
+              className="w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm shadow-sm outline-none backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
               value={frequency}
-              onChange={(e) => setFrequency(e.target.value)}
-              className="border p-2 rounded w-full mb-3"
+              onChange={(e) => setFrequency(e.target.value as any)}
             >
-              <option value="Monthly">Monthly</option>
-              <option value="Weekly">Weekly</option>
-              <option value="Semi-Monthly">Semi-Monthly</option>
-              <option value="Yearly">Yearly</option>
+              <option>Monthly</option>
+              <option>Weekly</option>
+              <option>Semi-Monthly</option>
+              <option>Yearly</option>
             </select>
-
-            <label className="block text-sm font-medium mb-1">Start Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="border p-2 rounded w-full mb-3"
-            />
-
-            <label className="block text-sm font-medium mb-1">
-              End Date (optional)
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="border p-2 rounded w-full mb-4"
-            />
-
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 border rounded"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={addRecurring}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded"
-              >
-                Add
-              </button>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="mb-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  Start date
+                </div>
+                <input
+                  className="w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm shadow-sm outline-none backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  End date
+                </div>
+                <input
+                  className="w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm shadow-sm outline-none backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
             </div>
           </div>
-        </div>
+
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={() => setShowModal(false)}
+              className="rounded-xl border border-white/30 bg-white/70 px-4 py-2 text-sm shadow-sm dark:border-zinc-700/40 dark:bg-zinc-800/60"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={addRecurring}
+              className="rounded-xl bg-gradient-to-tr from-blue-600 to-fuchsia-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+            >
+              Save
+            </button>
+          </div>
+        </ModalShell>
       )}
     </div>
   );

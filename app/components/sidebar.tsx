@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import React, { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import {
   Home,
   CreditCard,
@@ -30,6 +29,7 @@ export type Page =
 
 type SidebarProps = {
   selected?: Page | string;
+  // Puede venir como setState o como callback externa
   setSelected?: Dispatch<SetStateAction<Page>> | ((value: Page | string) => void);
   user?: { email?: string | null };
   onLogout?: () => void;
@@ -65,9 +65,13 @@ export default function Sidebar({
   const email = user?.email ?? "guest@vitafin.com";
   const initials = useMemo(() => email.charAt(0).toUpperCase(), [email]);
 
+  // ✅ sin `any`: llamamos con una firma compatible (Page => void)
   const changeSelected = (value: Page) => {
-    if (typeof setSelected === "function") (setSelected as any)(value);
-    else setInternalSelected(value);
+    if (setSelected) {
+      (setSelected as (v: Page) => void)(value);
+    } else {
+      setInternalSelected(value);
+    }
   };
 
   return (
@@ -140,46 +144,47 @@ export default function Sidebar({
       </ul>
 
       {/* Footer fijo abajo (email + hover logout) */}
-<div className="pointer-events-auto absolute inset-x-3 bottom-3">
-  <div className="relative group">
-    <button
-      className={[
-        "flex w-full items-center gap-3 rounded-2xl border border-white/30",
-        "bg-white/70 px-3 py-2 text-sm text-zinc-700 shadow-sm backdrop-blur",
-        "transition hover:bg-white dark:border-zinc-700/40 dark:bg-zinc-800/60 dark:text-zinc-200",
-        collapsed ? "justify-center" : "justify-between",
-      ].join(" ")}
-      title={email}
-    >
-      <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-fuchsia-500 text-xs font-bold text-white">
-          {initials}
+      <div className="pointer-events-auto absolute inset-x-3 bottom-3">
+        <div className="relative group">
+          <button
+            className={[
+              "flex w-full items-center gap-3 rounded-2xl border border-white/30",
+              "bg-white/70 px-3 py-2 text-sm text-zinc-700 shadow-sm backdrop-blur",
+              "transition hover:bg-white dark:border-zinc-700/40 dark:bg-zinc-800/60 dark:text-zinc-200",
+              collapsed ? "justify-center" : "justify-between",
+            ].join(" ")}
+            title={email}
+          >
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-fuchsia-500 text-xs font-bold text-white">
+                {initials}
+              </div>
+              {!collapsed && <span className="truncate max-w-[160px]">{email}</span>}
+            </div>
+            {!collapsed && <span className="text-xs text-zinc-400">▼</span>}
+          </button>
+
+          {/* Hover dropdown */}
+          <div
+            className={[
+              "pointer-events-none absolute bottom-full left-0 right-0 mb-2",
+              "opacity-0 translate-y-1 transition duration-150 ease-out",
+              "group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto",
+            ].join(" ")}
+          >
+            <div className="rounded-2xl border border-white/30 bg-white/90 p-2 text-sm shadow-lg backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/90">
+              <button
+                onClick={() =>
+                  (typeof onLogout === "function" ? onLogout() : alert("Replace with your logout flow"))
+                }
+                className="w-full rounded-xl px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/60"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
         </div>
-        {!collapsed && <span className="truncate max-w-[160px]">{email}</span>}
       </div>
-      {!collapsed && <span className="text-xs text-zinc-400">▼</span>}
-    </button>
-
-    {/* Hover dropdown */}
-    <div
-      className={[
-        "pointer-events-none absolute bottom-full left-0 right-0 mb-2",
-        "opacity-0 translate-y-1 transition duration-150 ease-out",
-        "group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto",
-      ].join(" ")}
-    >
-      <div className="rounded-2xl border border-white/30 bg-white/90 p-2 text-sm shadow-lg backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/90">
-        <button
-          onClick={() => (typeof onLogout === "function" ? onLogout() : alert("Replace with your logout flow"))}
-          className="w-full rounded-xl px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/60"
-        >
-          Logout
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
     </aside>
   );
 }

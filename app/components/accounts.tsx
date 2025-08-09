@@ -520,7 +520,11 @@ export default function Accounts() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} width={70} />
-                    <Tooltip formatter={(v: any) => (Number(v) || 0).toLocaleString()} />
+                    <Tooltip
+                    formatter={(value: string | number, name: string) =>
+                      (typeof value === "number" ? value : Number(value) || 0).toLocaleString()
+                    }
+                  />
                     <Area type="monotone" dataKey="balance" stroke="#6366F1" fill="url(#bal)" />
                   </AreaChart>
                 </ResponsiveContainer>

@@ -61,7 +61,6 @@ function getMonthRange(yyyymm?: string) {
   return { startISO: toISO(start), endISO: toISO(end) };
 }
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
-const reportRef = useRef<HTMLDivElement | null>(null);
 
 // ===== MonthPicker (no texto libre) =====
 function MonthPicker({
@@ -75,7 +74,6 @@ function MonthPicker({
   minYear?: number;
   maxYear?: number;
 }) {
-  // parse robusto
   const m = /^\d{4}-\d{2}$/.test(value)
     ? { y: Number(value.slice(0, 4)), m: Number(value.slice(5, 7)) - 1 }
     : { y: new Date().getFullYear(), m: new Date().getMonth() };
@@ -152,6 +150,9 @@ function MonthPicker({
 
 // ===== Component =====
 export default function Reports() {
+  // ✅ useRef dentro del componente
+  const reportRef = useRef<HTMLDivElement>(null);
+
   const [month, setMonth] = useState<string>(() => {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -169,8 +170,6 @@ export default function Reports() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const reportRef = useRef<HTMLDivElement | null>(null);
-
   // --- Net worth (account_balances) ---
   useEffect(() => {
     let mounted = true;
@@ -181,22 +180,24 @@ export default function Reports() {
           .from("account_balances")
           .select("balance, recorded_at")
           .order("recorded_at", { ascending: true })
+          .returns<{ balance: number; recorded_at: string }[]>()
           .throwOnError();
 
         // Agrupar por fecha (YYYY-MM-DD)
         const grouped: Record<string, number> = {};
-        (data ?? []).forEach((row: any) => {
-          const d = String(row.recorded_at); // ya es date en BD
+        (data ?? []).forEach((row) => {
+          const d = String(row.recorded_at);
           grouped[d] = (grouped[d] || 0) + Number(row.balance || 0);
         });
 
-        const result = Object.entries(grouped)
+        const result: BalanceItem[] = Object.entries(grouped)
           .map(([date, total]) => ({ date, total }))
           .sort((a, b) => a.date.localeCompare(b.date));
 
         if (mounted) setBalanceData(result);
-      } catch (err: any) {
-        console.error("Error fetching balance history:", err?.message || err);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Error fetching balance history:", msg);
         if (mounted) setBalanceData([]);
       } finally {
         if (mounted) setChartLoading(false);
@@ -214,9 +215,10 @@ export default function Reports() {
           .from("categories")
           .select("id,name")
           .order("name")
+          .returns<Category[]>()
           .throwOnError();
         if (mounted) setCategories(data ?? []);
-      } catch (err) {
+      } catch {
         if (mounted) setCategories([]);
       }
     })();
@@ -236,6 +238,7 @@ export default function Reports() {
           .gte("date", startISO)
           .lte("date", endISO)
           .order("date", { ascending: true })
+          .returns<Expense[]>()
           .throwOnError();
 
         const { data: inc } = await supabase
@@ -244,15 +247,17 @@ export default function Reports() {
           .gte("date", startISO)
           .lte("date", endISO)
           .order("date", { ascending: true })
+          .returns<Income[]>()
           .throwOnError();
 
         if (mounted) {
-          setExpenses((exp ?? []) as Expense[]);
-          setIncomes((inc ?? []) as Income[]);
+          setExpenses(exp ?? []);
+          setIncomes(inc ?? []);
         }
-      } catch (err: any) {
-        console.error("Error loading monthly data:", err?.message || err);
-        if (mounted) setErrorMsg(err?.message || "Unknown error");
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Error loading monthly data:", msg);
+        if (mounted) setErrorMsg(msg);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -314,26 +319,23 @@ export default function Reports() {
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
-      const imgProps =
-        (pdf as any).getImageProperties?.(imgData) || {
-          width: canvas.width,
-          height: canvas.height,
-        };
-      const imgWidth = pageWidth - 20;
-      const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+      // ✅ sin (pdf as any): calculamos del canvas
+      const imgWidth = pageWidth - 20; // márgenes 10mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
       if (imgHeight <= pageHeight - 20) {
         pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight, undefined, "FAST");
       } else {
         // Partir en varias páginas si es largo
-        let remaining = imgHeight;
-        let sY = 0;
-        const pxPageHeight = ((pageHeight - 20) * imgProps.width) / imgWidth;
+        const usableHeight = pageHeight - 20;
+        const pxPerPage = (usableHeight * canvas.width) / imgWidth;
 
-        while (remaining > 0) {
+        let sY = 0;
+        while (sY < canvas.height) {
           const pageCanvas = document.createElement("canvas");
           pageCanvas.width = canvas.width;
-          pageCanvas.height = Math.min(pxPageHeight, canvas.height - sY);
+          pageCanvas.height = Math.min(pxPerPage, canvas.height - sY);
+
           const ctx = pageCanvas.getContext("2d");
           if (ctx) {
             ctx.drawImage(
@@ -348,13 +350,13 @@ export default function Reports() {
               pageCanvas.height
             );
           }
+
           const pageImg = pageCanvas.toDataURL("image/png");
           const pageImgHeight = (pageCanvas.height * imgWidth) / pageCanvas.width;
 
           pdf.addImage(pageImg, "PNG", 10, 10, imgWidth, pageImgHeight, undefined, "FAST");
-          remaining -= pageImgHeight;
           sY += pageCanvas.height;
-          if (remaining > 0) pdf.addPage();
+          if (sY < canvas.height) pdf.addPage();
         }
       }
 
@@ -416,7 +418,6 @@ export default function Reports() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* MonthPicker en lugar de texto libre */}
             <MonthPicker value={month} onChange={setMonth} minYear={2019} />
             <button
               onClick={handleExportCSV}

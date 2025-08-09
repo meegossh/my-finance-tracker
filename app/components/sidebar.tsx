@@ -14,6 +14,7 @@ import {
   Settings as SettingsIcon,
   Menu,
 } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 
 export type Page =
   | "Dashboard"
@@ -32,7 +33,7 @@ type SidebarProps = {
   // Puede venir como setState o como callback externa
   setSelected?: Dispatch<SetStateAction<Page>> | ((value: Page | string) => void);
   user?: { email?: string | null };
-  onLogout?: () => void;
+  onLogout?: () => void | Promise<void>;
 };
 
 const menuItems: Array<{ name: Page; icon: React.ComponentType<{ size?: number; className?: string }> }> = [
@@ -60,6 +61,8 @@ export default function Sidebar({
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [internalSelected, setInternalSelected] = useState<Page>("Dashboard");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   const currentSelected: Page = isPage(selected) ? selected : internalSelected;
 
   const email = user?.email ?? "guest@vitafin.com";
@@ -71,6 +74,25 @@ export default function Sidebar({
       (setSelected as (v: Page) => void)(value);
     } else {
       setInternalSelected(value);
+    }
+  };
+
+  // ✅ Lógica de logout centralizada en el Sidebar como fallback si no viene onLogout
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      if (onLogout) {
+        await onLogout();
+      } else {
+        // Fallback: cerrar sesión directamente aquí
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          // Muestra un mensaje simple; reemplázalo si usas toasts
+          window.alert(error.message);
+        }
+      }
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
@@ -174,12 +196,11 @@ export default function Sidebar({
           >
             <div className="rounded-2xl border border-white/30 bg-white/90 p-2 text-sm shadow-lg backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/90">
               <button
-                onClick={() =>
-                  (typeof onLogout === "function" ? onLogout() : alert("Replace with your logout flow"))
-                }
-                className="w-full rounded-xl px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/60"
+                onClick={() => void handleLogout()}
+                disabled={isLoggingOut}
+                className="w-full rounded-xl px-3 py-2 text-left hover:bg-zinc-100 disabled:opacity-60 dark:hover:bg-zinc-700/60"
               >
-                Logout
+                {isLoggingOut ? "Logging out…" : "Logout"}
               </button>
             </div>
           </div>

@@ -61,6 +61,7 @@ function getMonthRange(yyyymm?: string) {
   return { startISO: toISO(start), endISO: toISO(end) };
 }
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
+const reportRef = useRef<HTMLDivElement | null>(null);
 
 // ===== MonthPicker (no texto libre) =====
 function MonthPicker({
@@ -434,115 +435,118 @@ export default function Reports() {
       </Card>
 
       {/* Report content */}
-      <Card ref={reportRef as any}>
-        {/* Summary cards */}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl border border-white/30 bg-white/70 p-4 dark:border-zinc-700/40 dark:bg-zinc-800/60">
-            <div className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Ingresos ({startISO}–{endISO})
+      <Card>
+        <div ref={reportRef}>
+          {/* Summary cards */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/30 bg-white/70 p-4 dark:border-zinc-700/40 dark:bg-zinc-800/60">
+              <div className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Ingresos ({startISO}–{endISO})
+              </div>
+              <div className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+                ₡{totalIncomes.toLocaleString()}
+              </div>
             </div>
-            <div className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-              ₡{totalIncomes.toLocaleString()}
+            <div className="rounded-2xl border border-white/30 bg-white/70 p-4 dark:border-zinc-700/40 dark:bg-zinc-800/60">
+              <div className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Gastos ({startISO}–{endISO})
+              </div>
+              <div className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+                ₡{totalExpenses.toLocaleString()}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/30 bg-white/70 p-4 dark:border-zinc-700/40 dark:bg-zinc-800/60">
+              <div className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Neto
+              </div>
+              <div className={`mt-1 text-2xl font-semibold ${net >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                ₡{net.toLocaleString()}
+              </div>
             </div>
           </div>
-          <div className="rounded-2xl border border-white/30 bg-white/70 p-4 dark:border-zinc-700/40 dark:bg-zinc-800/60">
-            <div className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Gastos ({startISO}–{endISO})
-            </div>
-            <div className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-              ₡{totalExpenses.toLocaleString()}
-            </div>
-          </div>
-          <div className="rounded-2xl border border-white/30 bg-white/70 p-4 dark:border-zinc-700/40 dark:bg-zinc-800/60">
-            <div className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Neto
-            </div>
-            <div className={`mt-1 text-2xl font-semibold ${net >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-              ₡{net.toLocaleString()}
-            </div>
-          </div>
-        </div>
 
-        {/* Chart */}
-        <div className="mt-6">
-          <h3 className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Net Worth Over Time
-          </h3>
-          <div className="h-[300px] rounded-2xl border border-white/30 bg-white/70 p-3 dark:border-zinc-700/40 dark:bg-zinc-800/60">
-            {chartLoading ? (
-              <div className="grid h-full place-items-center text-zinc-500">Cargando…</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <RLineChart data={balanceData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="total" stroke="#f97316" strokeWidth={2} dot={false} />
-                </RLineChart>
-              </ResponsiveContainer>
-            )}
+          {/* Chart */}
+          <div className="mt-6">
+            <h3 className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Net Worth Over Time
+            </h3>
+            <div className="h-[300px] rounded-2xl border border-white/30 bg-white/70 p-3 dark:border-zinc-700/40 dark:bg-zinc-800/60">
+              {chartLoading ? (
+                <div className="grid h-full place-items-center text-zinc-500">Cargando…</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <RLineChart data={balanceData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="total" stroke="#f97316" strokeWidth={2} dot={false} />
+                  </RLineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Expenses by category */}
-        <div className="mt-6">
-          <h3 className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Gastos por categoría — {month}
-          </h3>
-          <div className="rounded-2xl border border-white/30 bg-white/70 p-0 dark:border-zinc-700/40 dark:bg-zinc-800/60">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="text-left text-zinc-600 dark:text-zinc-300">
-                  <tr>
-                    <th className="px-4 py-3">Categoría</th>
-                    <th className="px-4 py-3 text-right">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/30 dark:divide-zinc-700/40">
-                  {loading ? (
+          {/* Expenses by category */}
+          <div className="mt-6">
+            <h3 className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Gastos por categoría — {month}
+            </h3>
+            <div className="rounded-2xl border border-white/30 bg-white/70 p-0 dark:border-zinc-700/40 dark:bg-zinc-800/60">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-zinc-600 dark:text-zinc-300">
                     <tr>
-                      <td colSpan={2} className="px-4 py-4 text-zinc-500">
-                        Cargando…
-                      </td>
+                      <th className="px-4 py-3">Categoría</th>
+                      <th className="px-4 py-3 text-right">Total</th>
                     </tr>
-                  ) : expensesByCategory.length === 0 ? (
-                    <tr>
-                      <td colSpan={2} className="px-4 py-4 text-zinc-500">
-                        Sin datos para este mes.
-                      </td>
-                    </tr>
-                  ) : (
-                    expensesByCategory.map((row) => (
-                      <tr key={row.name}>
-                        <td className="px-4 py-2">{row.name}</td>
-                        <td className="px-4 py-2 text-right">₡{row.total.toLocaleString()}</td>
+                  </thead>
+                  <tbody className="divide-y divide-white/30 dark:divide-zinc-700/40">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-4 text-zinc-500">
+                          Cargando…
+                        </td>
                       </tr>
-                    ))
+                    ) : expensesByCategory.length === 0 ? (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-4 text-zinc-500">
+                          Sin datos para este mes.
+                        </td>
+                      </tr>
+                    ) : (
+                      expensesByCategory.map((row) => (
+                        <tr key={row.name}>
+                          <td className="px-4 py-2">{row.name}</td>
+                          <td className="px-4 py-2 text-right">₡{row.total.toLocaleString()}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {!loading && expensesByCategory.length > 0 && (
+                    <tfoot>
+                      <tr className="border-t border-white/30 dark:border-zinc-700/40">
+                        <td className="px-4 py-3 font-medium">Total</td>
+                        <td className="px-4 py-3 text-right font-semibold">
+                          ₡{totalExpenses.toLocaleString()}
+                        </td>
+                      </tr>
+                    </tfoot>
                   )}
-                </tbody>
-                {!loading && expensesByCategory.length > 0 && (
-                  <tfoot>
-                    <tr className="border-t border-white/30 dark:border-zinc-700/40">
-                      <td className="px-4 py-3 font-medium">Total</td>
-                      <td className="px-4 py-3 text-right font-semibold">
-                        ₡{totalExpenses.toLocaleString()}
-                      </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Error visible */}
-        {errorMsg && (
-          <div className="mt-4 rounded-xl border border-rose-300/40 bg-rose-50/60 p-3 text-rose-700">
-            {errorMsg}
-          </div>
-        )}
+          {/* Error visible */}
+          {errorMsg && (
+            <div className="mt-4 rounded-xl border border-rose-300/40 bg-rose-50/60 p-3 text-rose-700">
+              {errorMsg}
+            </div>
+          )}
+        </div>
       </Card>
+
     </div>
   );
 }

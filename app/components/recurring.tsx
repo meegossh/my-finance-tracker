@@ -94,6 +94,10 @@ interface Account {
   currency: "USD" | "CRC";
 }
 
+// Tipos auxiliares para selects
+type StatusFilter = "all" | "pending" | "paid";
+type Currency = "USD" | "CRC";
+
 // ===== Helpers =====
 const startOfMonth = (y: number, m: number) => new Date(y, m, 1);
 const endOfMonth = (y: number, m: number) => new Date(y, m + 1, 0);
@@ -119,9 +123,7 @@ export default function RecurringPage() {
   const [loading, setLoading] = useState(true);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid">(
-    "all"
-  );
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [accountFilter, setAccountFilter] = useState<string>("");
 
   // Modal (create recurring)
@@ -132,7 +134,7 @@ export default function RecurringPage() {
     useState<Recurring["frequency"]>("Monthly");
   const [startDate, setStartDate] = useState<string>(toISO(new Date()));
   const [endDate, setEndDate] = useState<string>("");
-  const [currency, setCurrency] = useState<"USD" | "CRC">("USD");
+  const [currency, setCurrency] = useState<Currency>("USD");
 
   useEffect(() => {
     const load = async () => {
@@ -356,7 +358,7 @@ export default function RecurringPage() {
           place: "Recurring",
         },
       ]);
-    } catch (_) {
+    } catch {
       // ignore
     }
 
@@ -421,7 +423,7 @@ export default function RecurringPage() {
           <select
             className="h-9 rounded-xl border border-white/30 bg-white/70 px-3 text-sm shadow-sm backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
           >
             <option value="all">All statuses</option>
             <option value="pending">Pending</option>
@@ -710,7 +712,7 @@ export default function RecurringPage() {
               <select
                 className="rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm shadow-sm outline-none backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value as any)}
+                onChange={(e) => setCurrency(e.target.value as Currency)}
               >
                 <option value="USD">USD ($)</option>
                 <option value="CRC">CRC (₡)</option>
@@ -719,7 +721,7 @@ export default function RecurringPage() {
             <select
               className="w-full rounded-xl border border-white/30 bg-white/70 px-3 py-2 text-sm shadow-sm outline-none backdrop-blur dark:border-zinc-700/40 dark:bg-zinc-800/60"
               value={frequency}
-              onChange={(e) => setFrequency(e.target.value as any)}
+              onChange={(e) => setFrequency(e.target.value as Recurring["frequency"])}
             >
               <option>Monthly</option>
               <option>Weekly</option>
